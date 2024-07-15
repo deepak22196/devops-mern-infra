@@ -2,8 +2,7 @@ pipeline {
     agent any
 
     environment {
-        NODE_HOME = '/usr/local/bin/node' // Update this path as needed
-        NODE_VERSION = '16.5.0' // Update to the desired Node.js version
+        NODE_VERSION = '16.5.0'
         NODE_DIR = "${env.WORKSPACE}/node-v${NODE_VERSION}-linux-x64"
         PATH = "${NODE_DIR}/bin:${env.PATH}"
         ARTIFACT_PATH = 'build/latest-build.zip' // Path to your artifact on Jenkins agent
@@ -18,38 +17,29 @@ pipeline {
             }
         }
         stage('Set Up Node.js') {
-    steps {
-        echo 'Installing Node.js...'
-        sh '''
-        NODE_VERSION=${NODE_VERSION}
-        NODE_DIR=${NODE_DIR}
-        mkdir -p ${NODE_DIR}
-        
-        # Install nvm (Node Version Manager)
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+            steps {
+                echo 'Installing Node.js...'
+                sh '''
+                NODE_VERSION=${NODE_VERSION}
+                NODE_DIR=${NODE_DIR}
+                mkdir -p ${NODE_DIR}
 
-       
+                # Download and install Node.js
+                curl -o node.tar.xz https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz
+                tar -xJf node.tar.xz -C ${NODE_DIR} --strip-components=1
 
-        # Download and install Node.js
-        nvm install ${NODE_VERSION}
-
-        # Use the installed Node.js version
-        nvm use ${NODE_VERSION}
-
-        # Verify the Node.js installation
-        node -v
-        npm -v
-        '''
-        echo 'Node.js installation completed'
-    }
-}
-
+                # Verify the Node.js installation
+                ${NODE_DIR}/bin/node -v
+                ${NODE_DIR}/bin/npm -v
+                '''
+                echo 'Node.js installation completed'
+            }
+        }
         stage('Install Dependencies') {
             steps {
                 sh 'npm install'
             }
         }
-        
         stage('Build Artifact') {
             steps {
                 // Add your build commands here, e.g., for a Node.js project
@@ -59,7 +49,6 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    
                     def s3Bucket = 'jobify-artifacts-bucket'
                     def s3Path = "latest-build.zip"
                     def snsTopicArn = "arn:aws:sns:ap-south-1:654654538309:jobify-build-updates"
