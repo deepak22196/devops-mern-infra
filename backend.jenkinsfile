@@ -18,32 +18,33 @@ pipeline {
             }
         }
         stage('Set Up Node.js') {
-            steps {
-                 
-                echo 'Installing Node.js...'
-                
-                sh '''
-                NODE_VERSION=${NODE_VERSION}
-                NODE_DIR=${NODE_DIR}
-                mkdir -p ${NODE_DIR}
-                
-                # installs nvm (Node Version Manager)
-                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    steps {
+        echo 'Installing Node.js...'
+        sh '''
+        NODE_VERSION=${NODE_VERSION}
+        NODE_DIR=${NODE_DIR}
+        mkdir -p ${NODE_DIR}
+        
+        # Install nvm (Node Version Manager)
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 
-                export NVM_DIR="$HOME/.nvm"
-                [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
-                # download and install Node.js (you may need to restart the terminal)
-                nvm install ${NODE_VERSION}
+        # Download and install Node.js
+        nvm install ${NODE_VERSION}
 
-                # verifies the right Node.js version is in the environment
-                node -v 
-                
-                '''
-                
-                echo 'Node.js installation completed'
-            }
-        }
+        # Use the installed Node.js version
+        nvm use ${NODE_VERSION}
+
+        # Verify the Node.js installation
+        node -v
+        npm -v
+        '''
+        echo 'Node.js installation completed'
+    }
+}
+
         stage('Install Dependencies') {
             steps {
                 sh 'npm install'
