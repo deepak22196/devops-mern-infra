@@ -2,9 +2,6 @@ const AWS = require("aws-sdk");
 const s3 = new AWS.S3();
 
 exports.handler = async (event) => {
-  const ec2 = new AWS.EC2();
-  const autoScaling = new AWS.AutoScaling();
-
   const instances = await getInstancesInAutoScalingGroup("jobify-asg");
 
   for (const instanceId of instances) {
