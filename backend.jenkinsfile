@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
-        NODE_VERSION = '16'
-        
-        
-        ARTIFACT_PATH = 'path/to/artifact.zip'  // Path to your artifact on Jenkins agent
+        NODE_HOME = '/usr/local/bin/node' // Update this path as needed
+        NODE_VERSION = '16.5.0' // Update to the desired Node.js version
+        ARTIFACT_PATH = 'build/latest-build.zip' // Path to your artifact on Jenkins agent
     }
 
     stages {
@@ -16,8 +15,12 @@ pipeline {
         }
         stage('Set Up Node.js') {
             steps {
-                sh 'nvm install $NODE_VERSION'
-                sh 'nvm use $NODE_VERSION'
+                // Install Node.js directly
+                sh '''
+                curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+                sudo apt-get install -y nodejs
+                '''
+                sh 'node --version' // Verify Node.js installation
             }
         }
         stage('Install Dependencies') {
@@ -30,6 +33,12 @@ pipeline {
         //         sh 'npm test'
         //     }
         // }
+        stage('Build Artifact') {
+            steps {
+                // Add your build commands here, e.g., for a Node.js project
+                sh 'npm run build'
+            }
+        }
         stage('Deploy') {
             steps {
                 script {
@@ -39,13 +48,14 @@ pipeline {
                     def snsTopicArn = "arn:aws:sns:ap-south-1:${ACCOUNT_ID}:jobify-build-updates"
 
                     // Upload the artifact to S3
-                    sh "aws s3 cp build/latest-build.zip s3://${s3Bucket}/${s3Path}"
+                    sh "aws s3 cp ${ARTIFACT_PATH} s3://${s3Bucket}/${s3Path}"
 
                     // Publish SNS message
                     sh """
                     aws sns publish --topic-arn ${snsTopicArn} --message "New build uploaded to S3"
                     """
                 }
+            }
+        }
     }
 }
-    }}
