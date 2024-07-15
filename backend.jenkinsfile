@@ -11,55 +11,51 @@ pipeline {
         stage('Checkout Backend Code') {
             steps {
                 echo 'checking out code'
-                git branch: 'main', url: 'https://github.com/deepak22196/devops-mern-backend.git'
-                echo 'checking out complete'
+                // git branch: 'main', url: 'https://github.com/deepak22196/devops-mern-backend.git'
+                // echo 'checking out complete'
             }
         }
-        stage('Set Up Node.js') {
-            steps {
-                echo 'installing node'
-                // Install Node.js directly
-                sh '''
-                curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-                sudo apt-get install -y nodejs
-                '''
-                sh 'node --version' // Verify Node.js installation
-                echo 'node install complete'
-            }
-        }
-        stage('Install Dependencies') {
-            steps {
-                sh 'npm install'
-            }
-        }
-        // stage('Run Tests') {
+        // stage('Set Up Node.js') {
         //     steps {
-        //         sh 'npm test'
+        //         echo 'installing node'
+        //         // Install Node.js directly
+        //         sh '''
+        //         curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+        //         sudo apt-get install -y nodejs
+        //         '''
+        //         sh 'node --version' // Verify Node.js installation
+        //         echo 'node install complete'
         //     }
         // }
-        stage('Build Artifact') {
-            steps {
-                // Add your build commands here, e.g., for a Node.js project
-                sh 'npm run build'
-            }
-        }
-        stage('Deploy') {
-            steps {
-                script {
+        // stage('Install Dependencies') {
+        //     steps {
+        //         sh 'npm install'
+        //     }
+        // }
+        
+        // stage('Build Artifact') {
+        //     steps {
+        //         // Add your build commands here, e.g., for a Node.js project
+        //         sh 'npm run build'
+        //     }
+        // }
+        // stage('Deploy') {
+        //     steps {
+        //         script {
                     
-                    def s3Bucket = 'jobify-artifacts-bucket'
-                    def s3Path = "latest-build.zip"
-                    def snsTopicArn = "arn:aws:sns:ap-south-1:654654538309:jobify-build-updates"
+        //             def s3Bucket = 'jobify-artifacts-bucket'
+        //             def s3Path = "latest-build.zip"
+        //             def snsTopicArn = "arn:aws:sns:ap-south-1:654654538309:jobify-build-updates"
 
-                    // Upload the artifact to S3
-                    sh "aws s3 cp ${ARTIFACT_PATH} s3://${s3Bucket}/${s3Path}"
+        //             // Upload the artifact to S3
+        //             sh "aws s3 cp ${ARTIFACT_PATH} s3://${s3Bucket}/${s3Path}"
 
-                    // Publish SNS message
-                    sh """
-                    aws sns publish --topic-arn ${snsTopicArn} --message "New build uploaded to S3"
-                    """
-                }
-            }
-        }
+        //             // Publish SNS message
+        //             sh """
+        //             aws sns publish --topic-arn ${snsTopicArn} --message "New build uploaded to S3"
+        //             """
+        //         }
+        //     }
+        // }
     }
 }
