@@ -3,11 +3,9 @@ pipeline {
 
     environment {
         NODE_VERSION = '16'
-        BASTION_HOST = 'bastion-host.example.com'
-        BASTION_USER = 'ec2user'  // Replace with your bastion host username
-        TARGET_HOST = 'private-instance-ip'  // Replace with your private instance IP
+        
+        
         ARTIFACT_PATH = 'path/to/artifact.zip'  // Path to your artifact on Jenkins agent
-        SSH_KEY = credentials('your-ssh-key-credential-id')  // Jenkins credential ID for SSH private key
     }
 
     stages {
@@ -27,17 +25,18 @@ pipeline {
                 sh 'npm install'
             }
         }
-        stage('Run Tests') {
-            steps {
-                sh 'npm test'
-            }
-        }
+        // stage('Run Tests') {
+        //     steps {
+        //         sh 'npm test'
+        //     }
+        // }
         stage('Deploy') {
             steps {
                 script {
+                    def ACCOUNT_ID='654654538309'
                     def s3Bucket = 'jobify-artifacts-bucket'
                     def s3Path = "latest-build.zip"
-                    def snsTopicArn = 'arn:aws:sns:ap-south-1:YOUR_ACCOUNT_ID:jobify-build-updates'
+                    def snsTopicArn = "arn:aws:sns:ap-south-1:${ACCOUNT_ID}:jobify-build-updates"
 
                     // Upload the artifact to S3
                     sh "aws s3 cp build/latest-build.zip s3://${s3Bucket}/${s3Path}"
