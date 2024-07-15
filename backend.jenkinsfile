@@ -19,16 +19,25 @@ pipeline {
         }
         stage('Set Up Node.js') {
             steps {
-                 echo 'Installing Node.js...'
-                // Download and extract Node.js
+                 
+                echo 'Installing Node.js...'
+                
                 sh '''
                 NODE_VERSION=${NODE_VERSION}
                 NODE_DIR=${NODE_DIR}
                 mkdir -p ${NODE_DIR}
-                curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz | tar -xJ --strip-components=1 -C ${NODE_DIR}
+                
+                # installs nvm (Node Version Manager)
+                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+                # download and install Node.js (you may need to restart the terminal)
+                nvm install ${NODE_VERSION}
+
+                # verifies the right Node.js version is in the environment
+                node -v 
+                
                 '''
-                sh 'node --version' // Verify Node.js installation
-                sh 'npm --version' // Verify npm installation
+                
                 echo 'Node.js installation completed'
             }
         }
