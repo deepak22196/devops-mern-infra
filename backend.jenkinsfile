@@ -4,6 +4,8 @@ pipeline {
     environment {
         NODE_HOME = '/usr/local/bin/node' // Update this path as needed
         NODE_VERSION = '16.5.0' // Update to the desired Node.js version
+        NODE_DIR = "${env.WORKSPACE}/node-v${NODE_VERSION}-linux-x64"
+        PATH = "${NODE_DIR}/bin:${env.PATH}"
         ARTIFACT_PATH = 'build/latest-build.zip' // Path to your artifact on Jenkins agent
     }
 
@@ -20,10 +22,15 @@ pipeline {
                 echo 'installing node'
                 // Install Node.js directly
                 sh '''
-                curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-                sudo apt-get install -y nodejs
-                '''
+                NODE_VERSION=${NODE_VERSION}
+                NODE_DIR=${NODE_DIR}
+                mkdir -p ${NODE_DIR}
+                curl -fsSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz | tar -xJ --strip-components=1 -C ${NODE_DIR}
+                
                 sh 'node --version' // Verify Node.js installation
+                sh 'npm --version' // Ve
+                '''
+               
                 echo 'node install complete'
             }
         }
