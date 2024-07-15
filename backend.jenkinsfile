@@ -10,17 +10,21 @@ pipeline {
     stages {
         stage('Checkout Backend Code') {
             steps {
+                echo 'checking out code'
                 git branch: 'main', url: 'https://github.com/deepak22196/devops-mern-backend.git'
+                echo 'checking out complete'
             }
         }
         stage('Set Up Node.js') {
             steps {
+                echo 'installing node'
                 // Install Node.js directly
                 sh '''
                 curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
                 sudo apt-get install -y nodejs
                 '''
                 sh 'node --version' // Verify Node.js installation
+                echo 'node install complete'
             }
         }
         stage('Install Dependencies') {
@@ -42,10 +46,10 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    def ACCOUNT_ID='654654538309'
+                    
                     def s3Bucket = 'jobify-artifacts-bucket'
                     def s3Path = "latest-build.zip"
-                    def snsTopicArn = "arn:aws:sns:ap-south-1:${ACCOUNT_ID}:jobify-build-updates"
+                    def snsTopicArn = "arn:aws:sns:ap-south-1:654654538309:jobify-build-updates"
 
                     // Upload the artifact to S3
                     sh "aws s3 cp ${ARTIFACT_PATH} s3://${s3Bucket}/${s3Path}"
