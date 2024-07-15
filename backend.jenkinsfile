@@ -1,11 +1,11 @@
 pipeline {
     agent any
 
-    environment {
-        // NODE_HOME = '/usr/local/bin/node' // Update this path as needed
-        // NODE_VERSION = '16.5.0' // Update to the desired Node.js version
-        // ARTIFACT_PATH = 'build/latest-build.zip' // Path to your artifact on Jenkins agent
-    }
+    // environment {
+    //     // NODE_HOME = '/usr/local/bin/node' // Update this path as needed
+    //     // NODE_VERSION = '16.5.0' // Update to the desired Node.js version
+    //     // ARTIFACT_PATH = 'build/latest-build.zip' // Path to your artifact on Jenkins agent
+    // }
 
     stages {
         stage('Checkout Backend Code') {
