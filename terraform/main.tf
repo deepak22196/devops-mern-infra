@@ -181,13 +181,94 @@ resource "aws_instance" "jobify-app-server-b" {
   }
 }
 
+
+
+# Auto Scaling Group
+resource "aws_autoscaling_group" "jobify-asg" {
+  desired_capacity     = 1
+  max_size             = 4
+  min_size             = 1
+  # health_check_type    = "EC2"
+  # health_check_grace_period = 300
+  force_delete         = true
+  launch_configuration = aws_launch_configuration.jobify-launch-config.name
+  vpc_zone_identifier  = [
+    aws_subnet.jobify-private-subnet-a.id,
+    aws_subnet.jobify-private-subnet-b.id
+  ]
+
+  tag {
+    key                 = "Name"
+    value               = "jobify-app-server"
+    propagate_at_launch = true
+  }
+}
+
+# Launch Configuration
+# Launch Configuration
+resource "aws_launch_configuration" "jobify-launch-config" {
+  name_prefix   = "jobify-lc"
+  image_id      = "ami-0ec0e125bb6c6e8ec"  # Amazon Linux 2 AMI
+  instance_type = "t2.micro"
+  security_groups = [aws_security_group.jobify-app-sg.id]
+
+  user_data = <<-EOF
+    #!/bin/bash
+    yum update -y
+    yum install -y aws-cli unzip
+    aws s3 cp s3://${aws_s3_bucket.jobify-artifacts.bucket}/build/artifact.zip /tmp/artifact.zip
+    unzip -o /tmp/artifact.zip -d /var/www/html
+    rm /tmp/artifact.zip
+
+    # Create the systemd service file
+    cat <<EOT > /etc/systemd/system/myapp.service
+    [Unit]
+    Description=My Node.js Application
+    After=network.target
+
+    [Service]
+    ExecStart=/usr/bin/node /var/www/html/index.js
+    Restart=always
+    User=nobody
+    Group=nobody
+    Environment=PATH=/usr/bin:/usr/local/bin
+    Environment=NODE_ENV=production
+    WorkingDirectory=/var/www/html
+
+    [Install]
+    WantedBy=multi-user.target
+    EOT
+
+    # Reload systemd, enable and start the service
+    systemctl daemon-reload
+    systemctl enable myapp.service
+    systemctl start myapp.service
+  EOF
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+
+
+# S3 Bucket for Jenkins Artifacts
+resource "aws_s3_bucket" "jobify-artifacts" {
+  bucket = "jobify-artifacts-bucket"
+
+  tags = {
+    Name = "jobify-artifacts-bucket"
+  }
+}
+
+
 # Application Load Balancer (ALB)
 resource "aws_lb" "jobify-alb" {
   name               = "jobify-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.jobify-app-sg.id]
-  subnets            = [aws_subnet.jobify-public-subnet-a.id,aws_subnet.jobify-public-subnet-b.id]
+  subnets            = [aws_subnet.jobify-public-subnet-a.id, aws_subnet.jobify-public-subnet-b.id]
 
   tags = {
     Name = "jobify-alb"
@@ -241,35 +322,82 @@ resource "aws_lb_target_group_attachment" "app_server_b" {
 }
 
 
-# Elastic Load Balancer
-# resource "aws_lb" "jobify-elb" {
-#   name               = "jobify-elb"
-#   availability_zones = ["ap-south-1a", "ap-south-1b"]
-#   security_groups = [aws_security_group.jobify-app-sg.id]
+# SNS Topic
+resource "aws_sns_topic" "jobify-build-updates" {
+  name = "jobify-build-updates"
+}
 
-#   listener {
-#     instance_port     = 80
-#     instance_protocol = "HTTP"
-#     lb_port           = 80
-#     lb_protocol       = "HTTP"
-#   }
+# SQS Queue
+resource "aws_sqs_queue" "jobify-build-queue" {
+  name = "jobify-build-queue"
+}
 
-#   health_check {
-#     target              = "HTTP:80/"
-#     interval            = 30
-#     timeout             = 5
-#     healthy_threshold   = 2
-#     unhealthy_threshold = 2
-#   }
+# SNS Subscription to SQS
+resource "aws_sns_topic_subscription" "jobify-sns-to-sqs" {
+  topic_arn = aws_sns_topic.jobify-build-updates.arn
+  protocol  = "sqs"
+  endpoint  = aws_sqs_queue.jobify-build-queue.arn
+}
 
-#   instances = [aws_instance.jobify-app-server-a.id,aws_instance.jobify-app-server-b.id]
+# Lambda Function
+resource "aws_lambda_function" "jobify-deploy-lambda" {
+  filename         = "../lambdas/updateBuild.zip"
+  function_name    = "jobifyDeployFunction"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "updateBuild.handler"
+  runtime          = "nodejs16.x"
 
-#   tags = {
-#     Name = "jobify-elb"
-#   }
-# }
+  environment {
+    variables = {
+      BUCKET_NAME = aws_s3_bucket.jobify-artifacts.bucket
+    }
+  }
 
-# Elastic IPs for Bastion Host (optional)
-# resource "aws_eip" "bastion_eip" {
-#   instance = aws_instance.bastion.id
-# }
+  source_code_hash = filebase64sha256("../lambdas/updateBuild.zip")
+}
+
+# IAM Role for Lambda
+resource "aws_iam_role" "lambda_exec" {
+  name = "lambda_exec_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+# IAM Role Policy for Lambda
+resource "aws_iam_role_policy" "lambda_policy" {
+  name   = "lambda_policy"
+  role   = aws_iam_role.lambda_exec.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "logs:*",
+          "s3:*",
+          "ec2:*",
+          "autoscaling:*"
+        ]
+        Effect = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Lambda Permission for SNS
+resource "aws_lambda_permission" "allow_sns" {
+  statement_id  = "AllowExecutionFromSNS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.jobify-deploy-lambda.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.jobify-build-updates.arn
+}
