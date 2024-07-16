@@ -8,9 +8,9 @@ pipeline {
         S3_BUCKET = 'jobify-artifacts-bucket'
         S3_PATH = 'backend-code.zip'
         SNS_TOPIC_ARN = 'arn:aws:sns:ap-south-1:654654538309:jobify-build-updates'
-        AWS_DEFAULT_REGION = 'ap-south-1'
-        AWS_ACCESS_KEY_ID = credentials('deepakIAM').accessKeyId
-        AWS_SECRET_ACCESS_KEY = credentials('deepakIAM').secretAccessKey
+        AWS_ACCESS_KEY_ID     = credentials('aws-secret-access')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-key')
+        
     }
 
     stages {
@@ -36,6 +36,7 @@ pipeline {
         stage('Upload to S3') {
             steps {
                 echo 'Uploading to S3...'
+                sh "aws configure set region us-east-1"
                 sh "aws s3 cp backend-code.zip s3://${S3_BUCKET}/backend-code.zip"
                 echo 'Upload complete'
             }
