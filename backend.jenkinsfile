@@ -8,8 +8,7 @@ pipeline {
         S3_BUCKET = 'jobify-artifacts-bucket'
         S3_PATH = 'backend-code.zip'
         SNS_TOPIC_ARN = 'arn:aws:sns:ap-south-1:654654538309:jobify-build-updates'
-        AWS_CREDENTIALS = credentials('deepakIAM')
-        AWS_REGION='ap-south-1'
+        AWS_REGION = 'ap-south-1'
     }
 
     stages {
@@ -21,37 +20,6 @@ pipeline {
             }
         }
 
-        // stage('Set Up Node.js') {
-        //     steps {
-        //         echo 'Installing Node.js...'
-        //         sh '''
-        //         NODE_VERSION=${NODE_VERSION}
-        //         NODE_DIR=${NODE_DIR}
-        //         mkdir -p ${NODE_DIR}
-
-        //         # Download and install Node.js
-        //         curl -o node.tar.xz https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz
-        //         tar -xJf node.tar.xz -C ${NODE_DIR} --strip-components=1
-
-        //         # Verify the Node.js installation
-        //         ${NODE_DIR}/bin/node -v
-        //         ${NODE_DIR}/bin/npm -v
-        //         '''
-        //         echo 'Node.js installation completed'
-        //     }
-        // }
-        // stage('Install Dependencies') {
-        //     steps {
-        //         sh 'npm install'
-        //     }
-        // }
-        // stage('Build Artifact') {
-        //     steps {
-        //         // Add your build commands here, e.g., for a Node.js project
-        //         sh 'npm run build'
-        //     }
-        // }
-
         stage('Compress Backend Code') {
             steps {
                 echo 'Compressing backend code...'
@@ -62,15 +30,17 @@ pipeline {
                 echo 'Compression complete'
             }
         }
+
         stage('Upload to S3') {
             steps {
                 echo 'Uploading to S3...'
-                withAWS(credentials: AWS_CREDENTIALS, region: AWS_REGION) {
+                withAWS(credentials: 'deepakIAM', region: AWS_REGION) {
                     sh "aws s3 cp backend-code.zip s3://${S3_BUCKET}/backend-code.zip"
                 }
                 echo 'Upload complete'
             }
         }
+
         stage('Notify via SNS') {
             steps {
                 echo 'Sending notification...'
