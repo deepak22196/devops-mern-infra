@@ -1,5 +1,4 @@
 const AWS = require("aws-sdk");
-const s3 = new AWS.S3();
 
 exports.handler = async (event) => {
   const instances = await getInstancesInAutoScalingGroup("jobify-asg");
@@ -10,6 +9,7 @@ exports.handler = async (event) => {
 };
 
 async function getInstancesInAutoScalingGroup(asgName) {
+  const autoScaling = new AWS.AutoScaling();
   const params = {
     AutoScalingGroupNames: [asgName],
   };
@@ -20,9 +20,9 @@ async function getInstancesInAutoScalingGroup(asgName) {
 async function updateAndRestartInstance(instanceId) {
   const ssm = new AWS.SSM();
   const command = `
-      aws s3 cp s3://jobify-artifacts-bucket/build/artifact.zip /tmp/artifact.zip
-      unzip -o /tmp/artifact.zip -d /var/www/html
-      rm /tmp/artifact.zip
+      aws s3 cp s3://jobify-artifacts-bucket/backend-code.zip /tmp/backend-code.zip
+      unzip -o /tmp/backend-code.zip -d /var/www/html
+      rm /tmp/backend-code.zip
       systemctl restart myapp.service
     `;
 

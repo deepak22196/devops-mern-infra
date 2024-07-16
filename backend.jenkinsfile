@@ -5,62 +5,76 @@ pipeline {
         NODE_VERSION = '16.5.0'
         NODE_DIR = "${env.WORKSPACE}/node-v${NODE_VERSION}-linux-x64"
         PATH = "${NODE_DIR}/bin:${env.PATH}"
-        ARTIFACT_PATH = 'build/latest-build.zip' // Path to your artifact on Jenkins agent
+        S3_BUCKET = 'jobify-artifacts-bucket'
+        S3_PATH = 'backend-code.zip'
+        SNS_TOPIC_ARN = 'arn:aws:sns:ap-south-1:654654538309:jobify-build-updates'
     }
 
     stages {
         stage('Checkout Backend Code') {
             steps {
-                echo 'checking out code'
+                echo 'Checking out code'
                 git branch: 'main', url: 'https://github.com/deepak22196/devops-mern-backend.git'
-                echo 'checking out complete'
+                echo 'Checkout complete'
             }
         }
-        stage('Set Up Node.js') {
+
+        // stage('Set Up Node.js') {
+        //     steps {
+        //         echo 'Installing Node.js...'
+        //         sh '''
+        //         NODE_VERSION=${NODE_VERSION}
+        //         NODE_DIR=${NODE_DIR}
+        //         mkdir -p ${NODE_DIR}
+
+        //         # Download and install Node.js
+        //         curl -o node.tar.xz https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz
+        //         tar -xJf node.tar.xz -C ${NODE_DIR} --strip-components=1
+
+        //         # Verify the Node.js installation
+        //         ${NODE_DIR}/bin/node -v
+        //         ${NODE_DIR}/bin/npm -v
+        //         '''
+        //         echo 'Node.js installation completed'
+        //     }
+        // }
+        // stage('Install Dependencies') {
+        //     steps {
+        //         sh 'npm install'
+        //     }
+        // }
+        // stage('Build Artifact') {
+        //     steps {
+        //         // Add your build commands here, e.g., for a Node.js project
+        //         sh 'npm run build'
+        //     }
+        // }
+
+        stage('Compress Backend Code') {
             steps {
-                echo 'Installing Node.js...'
+                echo 'Compressing backend code...'
                 sh '''
-                NODE_VERSION=${NODE_VERSION}
-                NODE_DIR=${NODE_DIR}
-                mkdir -p ${NODE_DIR}
-
-                # Download and install Node.js
-                curl -o node.tar.xz https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz
-                tar -xJf node.tar.xz -C ${NODE_DIR} --strip-components=1
-
-                # Verify the Node.js installation
-                ${NODE_DIR}/bin/node -v
-                ${NODE_DIR}/bin/npm -v
+                zip -r backend-code.zip .
                 '''
-                echo 'Node.js installation completed'
+                echo 'Compression complete'
             }
         }
-        stage('Install Dependencies') {
+        stage('Upload to S3') {
             steps {
-                sh 'npm install'
+                echo 'Uploading to S3...'
+                sh '''
+                aws s3 cp backend-code.zip s3://${S3_BUCKET}/${S3_PATH}
+                '''
+                echo 'Upload complete'
             }
         }
-        stage('Build Artifact') {
+        stage('Notify via SNS') {
             steps {
-                // Add your build commands here, e.g., for a Node.js project
-                sh 'npm run build'
-            }
-        }
-        stage('Deploy') {
-            steps {
-                script {
-                    def s3Bucket = 'jobify-artifacts-bucket'
-                    def s3Path = "latest-build.zip"
-                    def snsTopicArn = "arn:aws:sns:ap-south-1:654654538309:jobify-build-updates"
-
-                    // Upload the artifact to S3
-                    sh "aws s3 cp ${ARTIFACT_PATH} s3://${s3Bucket}/${s3Path}"
-
-                    // Publish SNS message
-                    sh """
-                    aws sns publish --topic-arn ${snsTopicArn} --message "New build uploaded to S3"
-                    """
-                }
+                echo 'Sending notification...'
+                sh '''
+                aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "Backend code uploaded to S3 at s3://${S3_BUCKET}/${S3_PATH}"
+                '''
+                echo 'Notification sent'
             }
         }
     }

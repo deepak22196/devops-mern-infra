@@ -204,7 +204,7 @@ resource "aws_autoscaling_group" "jobify-asg" {
   }
 }
 
-# Launch Configuration
+
 # Launch Configuration
 resource "aws_launch_configuration" "jobify-launch-config" {
   name_prefix   = "jobify-lc"
@@ -216,9 +216,19 @@ resource "aws_launch_configuration" "jobify-launch-config" {
     #!/bin/bash
     yum update -y
     yum install -y aws-cli unzip
-    aws s3 cp s3://${aws_s3_bucket.jobify-artifacts.bucket}/build/artifact.zip /tmp/artifact.zip
-    unzip -o /tmp/artifact.zip -d /var/www/html
-    rm /tmp/artifact.zip
+
+    # Install Node.js and npm
+    curl -sL https://rpm.nodesource.com/setup_16.x | bash -
+    yum install -y nodejs
+
+    # Download and unzip the backend code
+    aws s3 cp s3://${aws_s3_bucket.jobify-artifacts.bucket}/backend-code.zip /tmp/backend-code.zip
+    unzip -o /tmp/backend-code.zip -d /var/www/html
+    rm /tmp/backend-code.zip
+
+    # Install dependencies and start the server
+    cd /var/www/html
+    npm install
 
     # Create the systemd service file
     cat <<EOT > /etc/systemd/system/myapp.service
@@ -227,7 +237,7 @@ resource "aws_launch_configuration" "jobify-launch-config" {
     After=network.target
 
     [Service]
-    ExecStart=/usr/bin/node /var/www/html/index.js
+    ExecStart=/usr/bin/npm run server
     Restart=always
     User=nobody
     Group=nobody
@@ -249,6 +259,7 @@ resource "aws_launch_configuration" "jobify-launch-config" {
     create_before_destroy = true
   }
 }
+
 
 
 
@@ -322,21 +333,10 @@ resource "aws_lb_target_group_attachment" "app_server_b" {
 }
 
 
+
 # SNS Topic
 resource "aws_sns_topic" "jobify-build-updates" {
   name = "jobify-build-updates"
-}
-
-# SQS Queue
-resource "aws_sqs_queue" "jobify-build-queue" {
-  name = "jobify-build-queue"
-}
-
-# SNS Subscription to SQS
-resource "aws_sns_topic_subscription" "jobify-sns-to-sqs" {
-  topic_arn = aws_sns_topic.jobify-build-updates.arn
-  protocol  = "sqs"
-  endpoint  = aws_sqs_queue.jobify-build-queue.arn
 }
 
 # Lambda Function
