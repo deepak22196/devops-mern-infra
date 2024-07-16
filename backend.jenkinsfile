@@ -54,6 +54,7 @@ pipeline {
             steps {
                 echo 'Compressing backend code...'
                 sh '''
+                rm -rf node_modules
                 zip -r backend-code.zip .
                 '''
                 echo 'Compression complete'
