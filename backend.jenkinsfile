@@ -36,7 +36,7 @@ pipeline {
         stage('Upload to S3') {
             steps {
                 echo 'Uploading to S3...'
-                sh "aws configure set region us-east-1"
+                sh "aws configure set region ap-south-1"
                 sh "aws s3 cp backend-code.zip s3://${S3_BUCKET}/backend-code.zip"
                 echo 'Upload complete'
             }
