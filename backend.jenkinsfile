@@ -8,6 +8,8 @@ pipeline {
         S3_BUCKET = 'jobify-artifacts-bucket'
         S3_PATH = 'backend-code.zip'
         SNS_TOPIC_ARN = 'arn:aws:sns:ap-south-1:654654538309:jobify-build-updates'
+        AWS_CREDENTIALS = credentials('deepakIAM')
+        AWS_REGION='ap-south-1'
     }
 
     stages {
@@ -63,9 +65,9 @@ pipeline {
         stage('Upload to S3') {
             steps {
                 echo 'Uploading to S3...'
-                sh '''
-                aws s3 cp backend-code.zip s3://${S3_BUCKET}/${S3_PATH}
-                '''
+                withAWS(credentials: AWS_CREDENTIALS, region: AWS_REGION) {
+                    sh "aws s3 cp backend-code.zip s3://${S3_BUCKET}/backend-code.zip"
+                }
                 echo 'Upload complete'
             }
         }
