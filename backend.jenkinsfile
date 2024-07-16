@@ -8,7 +8,9 @@ pipeline {
         S3_BUCKET = 'jobify-artifacts-bucket'
         S3_PATH = 'backend-code.zip'
         SNS_TOPIC_ARN = 'arn:aws:sns:ap-south-1:654654538309:jobify-build-updates'
-        AWS_REGION = 'ap-south-1'
+        AWS_DEFAULT_REGION = 'ap-south-1'
+        AWS_ACCESS_KEY_ID = credentials('deepakIAM').accessKeyId
+        AWS_SECRET_ACCESS_KEY = credentials('deepakIAM').secretAccessKey
     }
 
     stages {
@@ -24,7 +26,7 @@ pipeline {
             steps {
                 echo 'Compressing backend code...'
                 sh '''
-                rm -rf node_modules
+                
                 zip -r backend-code.zip .
                 '''
                 echo 'Compression complete'
@@ -34,9 +36,7 @@ pipeline {
         stage('Upload to S3') {
             steps {
                 echo 'Uploading to S3...'
-                withAWS(credentials: 'deepakIAM', region: AWS_REGION) {
-                    sh "aws s3 cp backend-code.zip s3://${S3_BUCKET}/backend-code.zip"
-                }
+                sh "aws s3 cp backend-code.zip s3://${S3_BUCKET}/backend-code.zip"
                 echo 'Upload complete'
             }
         }
@@ -44,9 +44,9 @@ pipeline {
         stage('Notify via SNS') {
             steps {
                 echo 'Sending notification...'
-                sh '''
+                sh """
                 aws sns publish --topic-arn ${SNS_TOPIC_ARN} --message "Backend code uploaded to S3 at s3://${S3_BUCKET}/${S3_PATH}"
-                '''
+                """
                 echo 'Notification sent'
             }
         }
