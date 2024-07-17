@@ -86,6 +86,74 @@ resource "aws_route_table_association" "b" {
   route_table_id = aws_route_table.jobify-rt.id
 }
 
+# NAT Gateways
+resource "aws_eip" "nat-a" {
+  vpc = true
+}
+
+resource "aws_nat_gateway" "nat-a" {
+  allocation_id = aws_eip.nat-a.id
+  subnet_id     = aws_subnet.jobify-public-subnet-a.id
+
+  tags = {
+    Name = "jobify-nat-a"
+  }
+}
+
+resource "aws_eip" "nat-b" {
+  vpc = true
+}
+
+resource "aws_nat_gateway" "nat-b" {
+  allocation_id = aws_eip.nat-b.id
+  subnet_id     = aws_subnet.jobify-public-subnet-b.id
+
+  tags = {
+    Name = "jobify-nat-b"
+  }
+}
+
+
+# Private Route Table A
+resource "aws_route_table" "jobify-private-rt-a" {
+  vpc_id = aws_vpc.jobify-vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat-a.id  # Route through NAT gateway A
+  }
+
+  tags = {
+    Name = "jobify-private-rt-a"
+  }
+}
+
+# Private Route Table B
+resource "aws_route_table" "jobify-private-rt-b" {
+  vpc_id = aws_vpc.jobify-vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat-b.id  # Route through NAT gateway B
+  }
+
+  tags = {
+    Name = "jobify-private-rt-b"
+  }
+}
+
+# Route Table Associations for Private Subnets
+resource "aws_route_table_association" "private-a" {
+  subnet_id      = aws_subnet.jobify-private-subnet-a.id
+  route_table_id = aws_route_table.jobify-private-rt-a.id
+}
+
+resource "aws_route_table_association" "private-b" {
+  subnet_id      = aws_subnet.jobify-private-subnet-b.id
+  route_table_id = aws_route_table.jobify-private-rt-b.id
+}
+
+
 # Security Group for Bastion Host
 resource "aws_security_group" "jobify-bastion-sg" {
   vpc_id = aws_vpc.jobify-vpc.id
@@ -148,90 +216,51 @@ resource "aws_security_group" "jobify-app-sg" {
 
 # Bastion Host
 resource "aws_instance" "jobify-bastion-host" {
-  ami           = "ami-0ec0e125bb6c6e8ec" # Amazon Linux 2 AMI
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.jobify-public-subnet-a.id
-  vpc_security_group_ids= [aws_security_group.jobify-bastion-sg.id]
+  ami                    = "ami-0ec0e125bb6c6e8ec" # Amazon Linux 2 AMI
+  instance_type          = "t2.micro"
+  iam_instance_profile   = aws_iam_instance_profile.ec2_ssm_profile.name
+  subnet_id              = aws_subnet.jobify-public-subnet-a.id
+  vpc_security_group_ids = [aws_security_group.jobify-bastion-sg.id]
+  associate_public_ip_address = true
+  key_name               = "ec2key"
 
   tags = {
     Name = "jobify-bastion-host"
   }
 }
 
-# EC2 Instances
-resource "aws_instance" "jobify-app-server-a" {
-  ami           = "ami-0ec0e125bb6c6e8ec" # Amazon Linux 2 AMI
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.jobify-private-subnet-a.id
-  vpc_security_group_ids = [aws_security_group.jobify-app-sg.id]
-
-  tags = {
-    Name = "jobify-app-server-a"
-  }
-}
-
-resource "aws_instance" "jobify-app-server-b" {
-  ami           = "ami-0ec0e125bb6c6e8ec" # Amazon Linux 2 AMI
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.jobify-private-subnet-b.id
-  vpc_security_group_ids = [aws_security_group.jobify-app-sg.id]
-
-  tags = {
-    Name = "jobify-app-server-b"
-  }
-}
-
-
-
-# Auto Scaling Group
-resource "aws_autoscaling_group" "jobify-asg" {
-  desired_capacity     = 1
-  max_size             = 4
-  min_size             = 1
-  # health_check_type    = "EC2"
-  # health_check_grace_period = 300
-  force_delete         = true
-  launch_configuration = aws_launch_configuration.jobify-launch-config.name
-  vpc_zone_identifier  = [
-    aws_subnet.jobify-private-subnet-a.id,
-    aws_subnet.jobify-private-subnet-b.id
-  ]
-
-  tag {
-    key                 = "Name"
-    value               = "jobify-app-server"
-    propagate_at_launch = true
-  }
-}
-
-
-# Launch Configuration
+# Auto Scaling Group Launch Configuration
 resource "aws_launch_configuration" "jobify-launch-config" {
-  name_prefix   = "jobify-lc"
-  image_id      = "ami-0ec0e125bb6c6e8ec"  # Amazon Linux 2 AMI
-  instance_type = "t2.micro"
-  security_groups = [aws_security_group.jobify-app-sg.id]
+  name_prefix       = "jobify-lc"
+  image_id          = "ami-0ec0e125bb6c6e8ec"  # Amazon Linux 2 AMI
+  instance_type     = "t2.micro"
+  security_groups   = [aws_security_group.jobify-app-sg.id]
+  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.name
+  key_name          = "ec2key"
 
   user_data = <<-EOF
     #!/bin/bash
-    yum update -y
-    yum install -y aws-cli unzip
-
-    # Install Node.js and npm
+    set -e  # Exit immediately if a command exits with a non-zero status
+    sudo yum update -y
+    
+    #Install Node.js and npm
     curl -sL https://rpm.nodesource.com/setup_16.x | bash -
     yum install -y nodejs
 
-    # Download and unzip the backend code
-    aws s3 cp s3://${aws_s3_bucket.jobify-artifacts.bucket}/backend-code.zip /tmp/backend-code.zip
-    unzip -o /tmp/backend-code.zip -d /var/www/html
-    rm /tmp/backend-code.zip
+    #Download and unzip the backend code
+    cd /home/ec2-user
+    sudo aws s3 cp s3://${aws_s3_bucket.jobify-artifacts.bucket}/backend-code.zip ./backend-code.zip
+    sudo unzip -o /home/ec2-user/backend-code.zip -d /home/ec2-user/jobify-server
+    sudo rm ./backend-code.zip
 
-    # Install dependencies and start the server
-    cd /var/www/html
+    #Install dependencies and start the server
+    cd jobify-server
     npm install
+    cd ..
+    
 
     # Create the systemd service file
-    cat <<EOT > /etc/systemd/system/myapp.service
+    cat <<EOT > jobify.service
     [Unit]
     Description=My Node.js Application
     After=network.target
@@ -243,16 +272,18 @@ resource "aws_launch_configuration" "jobify-launch-config" {
     Group=nobody
     Environment=PATH=/usr/bin:/usr/local/bin
     Environment=NODE_ENV=production
-    WorkingDirectory=/var/www/html
+    WorkingDirectory=/home/ec2-user/jobify-server
 
     [Install]
     WantedBy=multi-user.target
     EOT
 
+    sudo mv /home/ec2-user/jobify.service /etc/systemd/system/
+
     # Reload systemd, enable and start the service
-    systemctl daemon-reload
-    systemctl enable myapp.service
-    systemctl start myapp.service
+    sudo systemctl daemon-reload
+    sudo systemctl enable jobify.service
+    sudo systemctl start jobify.service
   EOF
 
   lifecycle {
@@ -260,8 +291,24 @@ resource "aws_launch_configuration" "jobify-launch-config" {
   }
 }
 
+# Auto Scaling Group
+resource "aws_autoscaling_group" "jobify-asg" {
+  name                      = "jobify-asg"
+  desired_capacity          = 2
+  max_size                  = 4
+  min_size                  = 2
+  launch_configuration      = aws_launch_configuration.jobify-launch-config.name
+  vpc_zone_identifier       = [
+    aws_subnet.jobify-private-subnet-a.id,
+    aws_subnet.jobify-private-subnet-b.id
+  ]
 
-
+  tag {
+    key                 = "Name"
+    value               = "jobify-app-server"
+    propagate_at_launch = true
+  }
+}
 
 # S3 Bucket for Jenkins Artifacts
 resource "aws_s3_bucket" "jobify-artifacts" {
@@ -271,7 +318,6 @@ resource "aws_s3_bucket" "jobify-artifacts" {
     Name = "jobify-artifacts-bucket"
   }
 }
-
 
 # Application Load Balancer (ALB)
 resource "aws_lb" "jobify-alb" {
@@ -303,14 +349,14 @@ resource "aws_lb_target_group" "jobify-target-group" {
   }
 
   tags = {
-    Name = "main-targets"
+    Name = "jobify-target-group"
   }
 }
 
-# ALB Listener
-resource "aws_lb_listener" "main" {
+# Load Balancer Listener
+resource "aws_lb_listener" "jobify-alb-listener" {
   load_balancer_arn = aws_lb.jobify-alb.arn
-  port              = "80"
+  port              = 80
   protocol          = "HTTP"
 
   default_action {
@@ -319,85 +365,74 @@ resource "aws_lb_listener" "main" {
   }
 }
 
-# Registering Targets
-resource "aws_lb_target_group_attachment" "app_server_a" {
-  target_group_arn = aws_lb_target_group.jobify-target-group.arn
-  target_id        = aws_instance.jobify-app-server-a.id
-  port             = 80
+# Attach ASG to Target Group
+resource "aws_autoscaling_attachment" "asg_attachment" {
+  autoscaling_group_name = aws_autoscaling_group.jobify-asg.name
+  lb_target_group_arn   = aws_lb_target_group.jobify-target-group.arn
 }
 
-resource "aws_lb_target_group_attachment" "app_server_b" {
-  target_group_arn = aws_lb_target_group.jobify-target-group.arn
-  target_id        = aws_instance.jobify-app-server-b.id
-  port             = 80
-}
+# IAM Role for EC2 instances to access S3 and SSM
+resource "aws_iam_role" "ec2_ssm_role" {
+  name = "ec2_ssm_role"
 
-
-
-# SNS Topic
-resource "aws_sns_topic" "jobify-build-updates" {
-  name = "jobify-build-updates"
-}
-
-# Lambda Function
-resource "aws_lambda_function" "jobify-deploy-lambda" {
-  filename         = "../lambdas/updateBuild.zip"
-  function_name    = "jobifyDeployFunction"
-  role             = aws_iam_role.lambda_exec.arn
-  handler          = "updateBuild.handler"
-  runtime          = "nodejs16.x"
-
-  environment {
-    variables = {
-      BUCKET_NAME = aws_s3_bucket.jobify-artifacts.bucket
-    }
-  }
-
-  source_code_hash = filebase64sha256("../lambdas/updateBuild.zip")
-}
-
-# IAM Role for Lambda
-resource "aws_iam_role" "lambda_exec" {
-  name = "lambda_exec_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-}
-
-# IAM Role Policy for Lambda
-resource "aws_iam_role_policy" "lambda_policy" {
-  name   = "lambda_policy"
-  role   = aws_iam_role.lambda_exec.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
+  assume_role_policy = <<EOF
+  {
+    "Version": "2012-10-17",
+    "Statement": [
       {
-        Action = [
-          "logs:*",
-          "s3:*",
-          "ec2:*",
-          "autoscaling:*"
-        ]
-        Effect = "Allow"
-        Resource = "*"
+        "Action": "sts:AssumeRole",
+        "Effect": "Allow",
+        "Principal": {
+          "Service": "ec2.amazonaws.com"
+        }
       }
     ]
-  })
+  }
+  EOF
+
+  tags = {
+    Name = "ec2_ssm_role"
+  }
 }
 
-# Lambda Permission for SNS
-resource "aws_lambda_permission" "allow_sns" {
-  statement_id  = "AllowExecutionFromSNS"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.jobify-deploy-lambda.function_name
-  principal     = "sns.amazonaws.com"
-  source_arn    = aws_sns_topic.jobify-build-updates.arn
+# IAM Policy for the role
+resource "aws_iam_policy" "ec2_ssm_policy" {
+  name = "ec2_ssm_policy"
+
+  policy = <<EOF
+  {
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Action": [
+          "ssm:DescribeInstanceInformation",
+          "ssm:SendCommand",
+          "ssm:GetCommandInvocation",
+          "ec2:DescribeInstances",
+          "s3:GetObject"
+        ],
+        "Resource": "*"
+      }
+    ]
+  }
+  EOF
+
+  tags = {
+    Name = "ec2_ssm_policy"
+  }
 }
+
+# Attach the policy to the role
+resource "aws_iam_role_policy_attachment" "ec2_ssm_role_policy_attachment" {
+  role       = aws_iam_role.ec2_ssm_role.name
+  policy_arn = aws_iam_policy.ec2_ssm_policy.arn
+}
+
+# IAM Instance Profile
+resource "aws_iam_instance_profile" "ec2_ssm_profile" {
+  name = "ec2_ssm_profile"
+  role = aws_iam_role.ec2_ssm_role.name
+}
+
+
