@@ -244,7 +244,7 @@ resource "aws_launch_configuration" "jobify-launch-config" {
     sudo yum update -y
     
     #Install Node.js and npm
-    curl -sL https://rpm.nodesource.com/setup_16.x | bash -
+    curl -sL https://rpm.nodesource.com/setup_18.x | bash -
     yum install -y nodejs
 
     #Download and unzip the backend code
