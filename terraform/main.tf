@@ -189,6 +189,21 @@ resource "aws_security_group" "jobify-app-sg" {
   }
 
   ingress {
+  from_port   = -1  # ICMP doesn't use ports, so set to -1
+  to_port     = -1  # ICMP doesn't use ports, so set to -1
+  protocol    = "icmp"
+  cidr_blocks = ["0.0.0.0/0"]  # Allow ICMP from anywhere (adjust if needed)
+  }
+
+  ingress {
+  from_port   = 5000  
+  to_port     = 9000  
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]  # Allow from anywhere
+}
+
+  
+  ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -247,43 +262,43 @@ resource "aws_launch_configuration" "jobify-launch-config" {
     curl -sL https://rpm.nodesource.com/setup_18.x | bash -
     yum install -y nodejs
 
-    #Download and unzip the backend code
-    cd /home/ec2-user
-    sudo aws s3 cp s3://${aws_s3_bucket.jobify-artifacts.bucket}/backend-code.zip ./backend-code.zip
-    sudo unzip -o /home/ec2-user/backend-code.zip -d /home/ec2-user/jobify-server
-    sudo rm ./backend-code.zip
+    # #Download and unzip the backend code
+    # cd /home/ec2-user
+    # sudo aws s3 cp s3://${aws_s3_bucket.jobify-artifacts.bucket}/backend-code.zip ./backend-code.zip
+    # sudo unzip -o /home/ec2-user/backend-code.zip -d /home/ec2-user/jobify-server
+    # sudo rm ./backend-code.zip
 
-    #Install dependencies and start the server
-    cd jobify-server
-    npm install
-    cd ..
+    # #Install dependencies and start the server
+    # cd jobify-server
+    # npm install
+    # cd ..
     
 
-    # Create the systemd service file
-    cat <<EOT > jobify.service
-    [Unit]
-    Description=My Node.js Application
-    After=network.target
+    # # Create the systemd service file
+    # cat <<EOT > jobify.service
+    # [Unit]
+    # Description=My Node.js Application
+    # After=network.target
 
-    [Service]
-    ExecStart=/usr/bin/npm run server
-    Restart=always
-    User=nobody
-    Group=nobody
-    Environment=PATH=/usr/bin:/usr/local/bin
-    Environment=NODE_ENV=production
-    WorkingDirectory=/home/ec2-user/jobify-server
+    # [Service]
+    # ExecStart=/usr/bin/npm /home/ec2-user/jobify-server/server.js
+    # Restart=always
+    # User=nobody
+    # Group=nobody
+    # Environment=PATH=/usr/bin:/usr/local/bin
+    # Environment=NODE_ENV=production
+    # WorkingDirectory=/home/ec2-user/jobify-server
 
-    [Install]
-    WantedBy=multi-user.target
-    EOT
+    # [Install]
+    # WantedBy=multi-user.target
+    # EOT
 
-    sudo mv /home/ec2-user/jobify.service /etc/systemd/system/
+    # sudo mv /home/ec2-user/jobify.service /etc/systemd/system/
 
-    # Reload systemd, enable and start the service
-    sudo systemctl daemon-reload
-    sudo systemctl enable jobify.service
-    sudo systemctl start jobify.service
+    # # Reload systemd, enable and start the service
+    # sudo systemctl daemon-reload
+    # sudo systemctl enable jobify.service
+    # sudo systemctl start jobify.service
   EOF
 
   lifecycle {

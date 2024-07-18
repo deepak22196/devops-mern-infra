@@ -34,6 +34,35 @@ async function updateAndRestartInstance(instanceId) {
       sudo unzip -o /home/ec2-user/backend-code.zip -d /home/ec2-user/jobify-server
       sudo rm ./backend-code.zip
       systemctl restart jobify.service
+      cd jobify-server
+      npm install
+      cd ..
+      # Create the systemd service file
+      cat <<EOT > jobify.service
+      [Unit]
+      Description=jobify backend app
+      After=network.target
+
+      [Service]
+      ExecStart=/usr/bin/npm /home/ec2-user/jobify-server/server.js
+      Restart=always
+      User=nobody
+      Group=nobody
+      Environment=PATH=/usr/bin:/usr/local/bin
+      Environment=NODE_ENV=production
+      WorkingDirectory=/home/ec2-user/jobify-server
+
+      [Install]
+      WantedBy=multi-user.target
+      EOT
+
+      sudo mv /home/ec2-user/jobify.service /etc/systemd/system/
+
+      # Reload systemd, enable and start the service
+      sudo systemctl daemon-reload
+      sudo systemctl enable jobify.service
+      sudo systemctl start jobify.service
+
     `;
 
   const params = {
