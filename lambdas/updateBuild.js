@@ -33,7 +33,7 @@ async function updateAndRestartInstance(instanceId) {
       sudo aws s3 cp s3://jobify-artifacts-bucket/backend-code.zip ./backend-code.zip
       sudo unzip -o /home/ec2-user/backend-code.zip -d /home/ec2-user/jobify-server
       sudo rm ./backend-code.zip
-      systemctl restart jobify.service
+      // systemctl restart jobify.service
       cd jobify-server
       npm install
       cd ..

@@ -257,6 +257,10 @@ resource "aws_launch_configuration" "jobify-launch-config" {
     #!/bin/bash
     set -e  # Exit immediately if a command exits with a non-zero status
     sudo yum update -y
+
+    sudo yum install -y nginx
+    sudo systemctl enable nginx
+    sudo systemctl start nginx
     
     #Install Node.js and npm
     curl -sL https://rpm.nodesource.com/setup_18.x | bash -
@@ -313,10 +317,13 @@ resource "aws_autoscaling_group" "jobify-asg" {
   max_size                  = 4
   min_size                  = 2
   launch_configuration      = aws_launch_configuration.jobify-launch-config.name
+  health_check_grace_period = 300
+  health_check_type         = "ELB"
   vpc_zone_identifier       = [
     aws_subnet.jobify-private-subnet-a.id,
     aws_subnet.jobify-private-subnet-b.id
   ]
+  
 
   tag {
     key                 = "Name"
@@ -451,3 +458,75 @@ resource "aws_iam_instance_profile" "ec2_ssm_profile" {
 }
 
 
+# SNS Topic
+resource "aws_sns_topic" "jobify-build-updates" {
+  name = "jobify-build-updates"
+}
+
+# Lambda Function
+resource "aws_lambda_function" "jobify-deploy-lambda" {
+  filename         = "../lambdas/updateBuild.zip"
+  function_name    = "jobifyDeployFunction"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "updateBuild.handler"
+  runtime          = "nodejs16.x"
+  environment {
+    variables = {
+      BUCKET_NAME = aws_s3_bucket.jobify-artifacts.bucket
+    }
+  }
+  source_code_hash = filebase64sha256("../lambdas/updateBuild.zip")
+}
+
+# IAM Role for Lambda
+resource "aws_iam_role" "lambda_exec" {
+  name = "lambda_exec_role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+# IAM Role Policy for Lambda
+resource "aws_iam_role_policy" "lambda_policy" {
+  name   = "lambda_policy"
+  role   = aws_iam_role.lambda_exec.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "logs:*",
+          "s3:*",
+          "ec2:*",
+          "autoscaling:*",
+          "ssm:*"
+        ]
+        Effect = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Lambda Permission for SNS
+resource "aws_lambda_permission" "allow_sns" {
+  statement_id  = "AllowExecutionFromSNS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.jobify-deploy-lambda.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.jobify-build-updates.arn
+}
+
+# SNS Subscription to Lambda
+resource "aws_sns_topic_subscription" "jobify-sns-to-lambda" {
+  topic_arn = aws_sns_topic.jobify-build-updates.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.jobify-deploy-lambda.arn
+}
